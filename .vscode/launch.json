@@ -6,6 +6,13 @@
     "configurations": [
         {
             "type": "java",
+            "name": "BancoGUI",
+            "request": "launch",
+            "mainClass": "BancoGUI",
+            "projectName": "GestionBanco_1dde74b3"
+        },
+        {
+            "type": "java",
             "name": "Main",
             "request": "launch",
             "mainClass": "Main",
