@@ -419,12 +419,63 @@ public class BancoGUI extends javax.swing.JFrame {
         for (int i = 0; i < cantidad; i++) {
             Transaccion t = fuente[i];
             modeloTransacciones.addRow(new Object[]{
-                t.tipo,
+                t.id,
                 t.monto,
+                t.tipo,
                 t.idOrigen == 0 ? "-" : t.idOrigen,
                 t.idDestino == 0 ? "-" : t.idDestino,
                 t.fecha
             });
+        }
+    }
+    
+    // Método para ELIMINAR definitivamente una cuenta cerrada
+    private void eliminarCuentaPermanentemente() {
+        // 1. Pedir ID
+        String idStr = javax.swing.JOptionPane.showInputDialog(this, "Ingrese ID de la cuenta CERRADA a eliminar:");
+        if (idStr == null) return;
+        
+        try {
+            int id = Integer.parseInt(idStr);
+            int idx = buscarIndicePorID(id);
+            
+            // 2. Validaciones
+            if (idx == -1) {
+                mostrarError("Cuenta no encontrada.");
+                return;
+            }
+            
+            // Solo permitimos borrar si YA está cerrada (por seguridad)
+            if (cuentas[idx].activa) {
+                mostrarError("No se puede eliminar una cuenta activa.\nPrimero debe cerrarla.");
+                return;
+            }
+            
+            // 3. Confirmación de seguridad
+            int confirm = javax.swing.JOptionPane.showConfirmDialog(this, 
+                "¿Está seguro de borrar permanentemente la cuenta ID " + id + "?\nEsta acción no se puede deshacer.", 
+                "Eliminar Definitivamente", 
+                javax.swing.JOptionPane.YES_NO_OPTION,
+                javax.swing.JOptionPane.WARNING_MESSAGE);
+                
+            if (confirm == javax.swing.JOptionPane.YES_OPTION) {
+                // 4. Lógica de borrado (Desplazar el arreglo hacia la izquierda)
+                // Desde la posición 'idx' hasta el final, movemos el siguiente al actual
+                for (int i = idx; i < contadorCuentas - 1; i++) {
+                    cuentas[i] = cuentas[i + 1];
+                }
+                
+                // Limpiamos la última posición que quedó duplicada y reducimos contador
+                cuentas[contadorCuentas - 1] = null;
+                contadorCuentas--;
+                
+                // 5. Actualizar interfaz
+                actualizarTablaCuentas();
+                javax.swing.JOptionPane.showMessageDialog(this, "Cuenta eliminada del sistema.");
+            }
+            
+        } catch (NumberFormatException e) {
+            mostrarError("ID inválido. Debe ser un número.");
         }
     }
     
@@ -451,6 +502,7 @@ public class BancoGUI extends javax.swing.JFrame {
         btnCerrar = new javax.swing.JButton();
         btnModificar = new javax.swing.JButton();
         btnBuscar = new javax.swing.JButton();
+        btnEliminar = new javax.swing.JButton();
         jPanel2 = new javax.swing.JPanel();
         jScrollPane2 = new javax.swing.JScrollPane();
         jTable2 = new javax.swing.JTable();
@@ -490,19 +542,32 @@ public class BancoGUI extends javax.swing.JFrame {
 
         btnBuscar.setText("Buscar");
 
+        btnEliminar.setBackground(new java.awt.Color(102, 0, 0));
+        btnEliminar.setText("Eliminar cuenta");
+        btnEliminar.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                btnEliminarActionPerformed(evt);
+            }
+        });
+
         javax.swing.GroupLayout jPanel3Layout = new javax.swing.GroupLayout(jPanel3);
         jPanel3.setLayout(jPanel3Layout);
         jPanel3Layout.setHorizontalGroup(
             jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(jPanel3Layout.createSequentialGroup()
-                .addGap(88, 88, 88)
-                .addComponent(btnCrear, javax.swing.GroupLayout.PREFERRED_SIZE, 107, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(btnCerrar, javax.swing.GroupLayout.PREFERRED_SIZE, 107, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
-                .addComponent(btnModificar)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
-                .addComponent(btnBuscar, javax.swing.GroupLayout.PREFERRED_SIZE, 108, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addGroup(jPanel3Layout.createSequentialGroup()
+                        .addGap(88, 88, 88)
+                        .addComponent(btnCrear, javax.swing.GroupLayout.PREFERRED_SIZE, 107, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(btnCerrar, javax.swing.GroupLayout.PREFERRED_SIZE, 107, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                        .addComponent(btnModificar)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                        .addComponent(btnBuscar, javax.swing.GroupLayout.PREFERRED_SIZE, 108, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addGroup(jPanel3Layout.createSequentialGroup()
+                        .addGap(240, 240, 240)
+                        .addComponent(btnEliminar, javax.swing.GroupLayout.PREFERRED_SIZE, 127, javax.swing.GroupLayout.PREFERRED_SIZE)))
                 .addContainerGap(81, Short.MAX_VALUE))
         );
         jPanel3Layout.setVerticalGroup(
@@ -514,7 +579,9 @@ public class BancoGUI extends javax.swing.JFrame {
                     .addComponent(btnCerrar)
                     .addComponent(btnModificar)
                     .addComponent(btnBuscar))
-                .addContainerGap(40, Short.MAX_VALUE))
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(btnEliminar)
+                .addContainerGap(11, Short.MAX_VALUE))
         );
 
         jPanel1.add(jPanel3, java.awt.BorderLayout.PAGE_START);
@@ -625,6 +692,11 @@ public class BancoGUI extends javax.swing.JFrame {
         pack();
     }// </editor-fold>//GEN-END:initComponents
 
+    private void btnEliminarActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnEliminarActionPerformed
+        // TODO add your handling code here:
+        eliminarCuentaPermanentemente();
+    }//GEN-LAST:event_btnEliminarActionPerformed
+
     /**
      * @param args the command line arguments
      */
@@ -655,6 +727,7 @@ public class BancoGUI extends javax.swing.JFrame {
     private javax.swing.JButton btnCerrar;
     private javax.swing.JButton btnCrear;
     private javax.swing.JButton btnDepositar;
+    private javax.swing.JButton btnEliminar;
     private javax.swing.JButton btnFiltrar;
     private javax.swing.JButton btnModificar;
     private javax.swing.JButton btnRetirar;
