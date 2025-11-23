@@ -1,7 +1,4 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/GUIForms/JFrame.java to edit this template
- */
+
 package banco;
 
 import javax.swing.JOptionPane;
@@ -35,6 +32,7 @@ public class BancoGUI extends javax.swing.JFrame {
      */
     public BancoGUI() {
         initComponents();
+        
         configurarTablas();
         asignarLogicaBotones();
         this.setTitle("Sistema Bancario - Proyecto Final (40%)");
@@ -82,7 +80,7 @@ public class BancoGUI extends javax.swing.JFrame {
         modeloCuentas.addColumn("Titular");
         modeloCuentas.addColumn("Saldo");
         modeloCuentas.addColumn("Estado");
-        jTable1.setModel(modeloCuentas);
+        jTableCuentas.setModel(modeloCuentas);
 
         // REQ I y J: Tabla de transacciones
         modeloTransacciones = new DefaultTableModel();
@@ -96,320 +94,276 @@ public class BancoGUI extends javax.swing.JFrame {
     }
 
     private void asignarLogicaBotones() {
-        jButton1.addActionListener(e -> crearCuenta());
-        jButton2.addActionListener(e -> cerrarCuenta());
-        jButton3.addActionListener(e -> modificarCuenta());
-        jButton4.addActionListener(e -> depositar());
-        jButton5.addActionListener(e -> retirar());
-        jButton6.addActionListener(e -> transferir());
-        jButton7.addActionListener(e -> buscarCuentaPorID());
+        btnCrear.addActionListener(e -> crearCuenta());
+        btnCerrar.addActionListener(e -> cerrarCuenta());
+        btnModificar.addActionListener(e -> modificarCuenta());
+        btnDepositar.addActionListener(e -> depositar());
+        btnRetirar.addActionListener(e -> retirar());
+        btnTransferir.addActionListener(e -> transferir());
+        btnBuscar.addActionListener(e -> buscarCuentaPorID());
         // Modificado para cumplir REQ J (Consultar historial desactivado)
-        jButton8.addActionListener(e -> consultarTransacciones()); 
+        btnFiltrar.addActionListener(e -> consultarTransacciones()); 
     }
 
     // --- LÓGICA DE NEGOCIO ---
 
-    // REQ A: Crear cuenta (Max 10, ID auto, Saldo input, No repetir ID)
     private void crearCuenta() {
-        if (contadorCuentas >= 10) {
+        if (contadorCuentas >= cuentas.length) {
             mostrarError("Límite de cuentas alcanzado (Máximo 10).");
             return;
         }
 
-        String titular = jTextField1.getText().trim();
-        if (titular.isEmpty()) {
+        String titular = JOptionPane.showInputDialog(this, "Ingrese el nombre del Titular:");
+        if (titular == null || titular.trim().isEmpty()) {
             mostrarError("El nombre del titular es obligatorio.");
             return;
         }
 
+        String saldoStr = JOptionPane.showInputDialog(this, "Ingrese saldo inicial para " + titular + ":");
         try {
-            String saldoStr = JOptionPane.showInputDialog(this, "Ingrese saldo inicial para " + titular + ":");
-            if (saldoStr == null) return;
             double saldo = Double.parseDouble(saldoStr);
             if (saldo < 0) {
                 mostrarError("El saldo no puede ser negativo.");
                 return;
             }
 
-            // Generación automática de ID y validación de no repetición
-            int nuevoID = 1001 + contadorCuentas; 
-            // Verificación paranoica de ID único
-            while (buscarIndicePorID(nuevoID) != -1) {
-                nuevoID++;
-            }
-
+            int nuevoID = (int) (Math.random() * 9000) + 1000; // Generar ID aleatorio
             cuentas[contadorCuentas] = new Cuenta(nuevoID, titular, saldo);
             contadorCuentas++;
             
             actualizarTablaCuentas();
-            jTextField1.setText("");
             JOptionPane.showMessageDialog(this, "Cuenta creada exitosamente.\nID Generado: " + nuevoID);
 
-        } catch (NumberFormatException e) {
+        } catch (NumberFormatException | NullPointerException e) {
             mostrarError("Dato inválido. Ingrese un número para el saldo.");
         }
     }
 
-    // REQ B: Cerrar cuenta (Mostrar info, Confirmar, Solo si saldo es 0)
+    // 2. Cerrar Cuenta
     private void cerrarCuenta() {
-        int fila = jTable1.getSelectedRow();
-        if (fila == -1) {
-            mostrarError("Seleccione una cuenta de la tabla para cerrar.");
-            return;
+        // Intentar obtener ID de la selección de la tabla primero
+        int fila = jTableCuentas.getSelectedRow();
+        String idStr = null;
+
+        if (fila != -1) {
+            idStr = jTableCuentas.getValueAt(fila, 0).toString();
+        } else {
+            // Si no seleccionó, pedir por input
+            idStr = JOptionPane.showInputDialog(this, "Ingrese ID de la cuenta a cerrar:");
         }
 
-        int id = (int) jTable1.getValueAt(fila, 0);
-        int idx = buscarIndicePorID(id);
-        Cuenta c = cuentas[idx];
+        if (idStr == null) return;
 
-        if (!c.activa) {
-            mostrarError("Esta cuenta ya está cerrada.");
-            return;
-        }
-
-        // Mostrar información antes de eliminar
-        String info = "Información de cuenta a cerrar:\n" +
-                      "ID: " + c.id + "\n" +
-                      "Titular: " + c.titular + "\n" +
-                      "Saldo: $" + c.saldo;
-        
-        int confirm = JOptionPane.showConfirmDialog(this, info + "\n\n¿Confirma el cierre?", "Confirmar Cierre", JOptionPane.YES_NO_OPTION);
-        if (confirm != JOptionPane.YES_OPTION) return;
-
-        // Validación saldo cero
-        if (c.saldo != 0.0) {
-            mostrarError("No se puede cerrar. La cuenta debe estar en ceros.\nSaldo actual: " + c.saldo);
-            return;
-        }
-
-        // Proceder al cierre
-        c.activa = false;
-        
-        // Mover transacciones al historial inactivo (REQ I y J)
-        moverTransaccionesAHistorialInactivo(c.id);
-        
-        actualizarTablaCuentas();
-        actualizarTablaTransacciones(true); // Refrescar vista activas
-        JOptionPane.showMessageDialog(this, "Cuenta cerrada correctamente.");
-    }
-
-    // REQ C: Modificar cuenta (Solo nombre, pedir confirmación)
-    private void modificarCuenta() {
-        int fila = jTable1.getSelectedRow();
-        if (fila == -1) {
-            mostrarError("Seleccione una cuenta para modificar.");
-            return;
-        }
-
-        int id = (int) jTable1.getValueAt(fila, 0);
-        Cuenta c = cuentas[buscarIndicePorID(id)];
-
-        String nuevoNombre = JOptionPane.showInputDialog(this, "Modificar nombre del titular:", c.titular);
-        if (nuevoNombre != null && !nuevoNombre.trim().isEmpty()) {
-            int confirm = JOptionPane.showConfirmDialog(this, "¿Seguro desea cambiar el nombre a: " + nuevoNombre + "?", "Confirmar", JOptionPane.YES_NO_OPTION);
-            if (confirm == JOptionPane.YES_OPTION) {
-                c.titular = nuevoNombre;
-                actualizarTablaCuentas();
-            }
-        }
-    }
-
-    // REQ D: Depositar (Cuenta existente)
-    private void depositar() {
         try {
-            int id = obtenerInt(JOptionPane.showInputDialog(this, "Ingrese ID Cuenta Destino:"));
-            if (id == -1) return;
-            
+            int id = Integer.parseInt(idStr);
             int idx = buscarIndicePorID(id);
-            if (idx == -1 || !cuentas[idx].activa) {
-                mostrarError("Cuenta no existe o está cerrada.");
-                return;
-            }
 
-            double monto = Double.parseDouble(jTextField2.getText());
-            if (monto <= 0) throw new NumberFormatException();
-
-            cuentas[idx].saldo += monto;
-            registrarTransaccion("Depósito", monto, id, id);
-            
-            actualizarTablaCuentas();
-            jTextField2.setText("");
-            JOptionPane.showMessageDialog(this, "Depósito realizado.");
-
-        } catch (Exception e) {
-            mostrarError("Datos inválidos (Monto o ID).");
-        }
-    }
-
-    // REQ E: Retirar (Verificar saldo)
-    private void retirar() {
-        try {
-            int id = obtenerInt(JOptionPane.showInputDialog(this, "Ingrese ID Cuenta Origen:"));
-            if (id == -1) return;
-
-            int idx = buscarIndicePorID(id);
-            if (idx == -1 || !cuentas[idx].activa) {
-                mostrarError("Cuenta no existe o está cerrada.");
-                return;
-            }
-
-            double monto = Double.parseDouble(jTextField2.getText());
-            if (monto <= 0) throw new NumberFormatException();
-
-            if (cuentas[idx].saldo >= monto) {
-                cuentas[idx].saldo -= monto;
-                registrarTransaccion("Retiro", monto, id, id);
-                actualizarTablaCuentas();
-                jTextField2.setText("");
-                JOptionPane.showMessageDialog(this, "Retiro realizado.");
-            } else {
-                mostrarError("Saldo insuficiente.");
-            }
-        } catch (Exception e) {
-            mostrarError("Datos inválidos.");
-        }
-    }
-
-    // REQ F: Transferir (Verificar saldo origen y existencia destino)
-    private void transferir() {
-        try {
-            int idOrigen = Integer.parseInt(jTextField3.getText());
-            int idDestino = Integer.parseInt(jTextField4.getText());
-            
-            // Usamos el campo de monto principal o pedimos uno nuevo
-            String montoStr = jTextField2.getText();
-            if (montoStr.isEmpty()) montoStr = JOptionPane.showInputDialog("Ingrese monto a transferir:");
-            double monto = Double.parseDouble(montoStr);
-
-            int idxOr = buscarIndicePorID(idOrigen);
-            int idxDe = buscarIndicePorID(idDestino);
-
-            if (idxOr == -1 || !cuentas[idxOr].activa) { mostrarError("Cuenta origen inválida."); return; }
-            if (idxDe == -1 || !cuentas[idxDe].activa) { mostrarError("Cuenta destino inválida."); return; }
-
-            if (cuentas[idxOr].saldo >= monto) {
-                cuentas[idxOr].saldo -= monto;
-                cuentas[idxDe].saldo += monto;
-                registrarTransaccion("Transferencia", monto, idOrigen, idDestino);
-                
-                actualizarTablaCuentas();
-                jTextField3.setText(""); jTextField4.setText(""); jTextField2.setText("");
-                JOptionPane.showMessageDialog(this, "Transferencia exitosa.");
-            } else {
-                mostrarError("Saldo insuficiente en cuenta origen.");
-            }
-        } catch (Exception e) {
-            mostrarError("Verifique todos los campos numéricos.");
-        }
-    }
-
-    // REQ G: Buscar Cuenta por ID (Tabla)
-    private void buscarCuentaPorID() {
-        try {
-            int id = Integer.parseInt(jTextField5.getText());
-            modeloCuentas.setRowCount(0); // Limpiar tabla
-            
-            int idx = buscarIndicePorID(id);
-            if (idx != -1) {
-                Cuenta c = cuentas[idx];
-                modeloCuentas.addRow(new Object[]{c.id, c.titular, c.saldo, c.activa ? "Activa" : "Cerrada"});
-            } else {
+            if (idx == -1) {
                 mostrarError("Cuenta no encontrada.");
+                return;
             }
-        } catch (Exception e) {
+
+            if (!cuentas[idx].activa) {
+                mostrarError("Esta cuenta ya está cerrada.");
+                return;
+            }
+
+            if (cuentas[idx].saldo > 0) {
+                mostrarError("No se puede cerrar. La cuenta debe estar en ceros.\nSaldo actual: " + cuentas[idx].saldo);
+                return;
+            }
+
+            int confirm = JOptionPane.showConfirmDialog(this, 
+                "Información de cuenta a cerrar:\nID: " + cuentas[idx].id + "\nTitular: " + cuentas[idx].titular + "\n\n¿Confirma el cierre?",
+                "Confirmar Cierre", JOptionPane.YES_NO_OPTION);
+
+            if (confirm == JOptionPane.YES_OPTION) {
+                cuentas[idx].activa = false;
+                moverTransaccionesAHistorialInactivo(id);
+                actualizarTablaCuentas();
+                actualizarTablaTransacciones(true); // Mostrar activas por defecto
+                JOptionPane.showMessageDialog(this, "Cuenta cerrada correctamente.");
+            }
+
+        } catch (NumberFormatException e) {
             mostrarError("ID inválido.");
         }
     }
 
-    // REQ H y J: Consultar cuentas / Transacciones
-    // Modifiqué este botón para que sirva de selector de historiales
+    // 3. Modificar Titular
+    private void modificarCuenta() {
+        int fila = jTableCuentas.getSelectedRow();
+        String idStr;
+
+        if (fila != -1) {
+            idStr = jTableCuentas.getValueAt(fila, 0).toString();
+        } else {
+            idStr = JOptionPane.showInputDialog(this, "Ingrese ID de la cuenta a modificar:");
+        }
+
+        if (idStr == null) return;
+
+        try {
+            int id = Integer.parseInt(idStr);
+            int idx = buscarIndicePorID(id);
+
+            if (idx == -1) {
+                mostrarError("Cuenta no encontrada.");
+                return;
+            }
+
+            String nuevoNombre = JOptionPane.showInputDialog(this, "Modificar nombre del titular (" + cuentas[idx].titular + "):", cuentas[idx].titular);
+            if (nuevoNombre != null && !nuevoNombre.trim().isEmpty()) {
+                cuentas[idx].titular = nuevoNombre;
+                actualizarTablaCuentas();
+                JOptionPane.showMessageDialog(this, "Nombre actualizado.");
+            }
+        } catch (NumberFormatException e) {
+            mostrarError("ID inválido.");
+        }
+    }
+
+    // 4. Depósito
+    private void depositar() {
+        try {
+            String idStr = JOptionPane.showInputDialog(this, "Ingrese ID Cuenta Destino:");
+            if (idStr == null) return;
+            int id = Integer.parseInt(idStr);
+
+            String montoStr = JOptionPane.showInputDialog(this, "Ingrese monto a depositar:");
+            if (montoStr == null) return;
+            double monto = Double.parseDouble(montoStr);
+
+            registrarTransaccion("Depósito", monto, 0, id);
+            JOptionPane.showMessageDialog(this, "Depósito realizado.");
+
+        } catch (Exception e) {
+            mostrarError("Datos inválidos (Monto o ID) o cuenta inexistente.");
+        }
+    }
+
+    // 5. Retiro
+    private void retirar() {
+        try {
+            String idStr = JOptionPane.showInputDialog(this, "Ingrese ID Cuenta Origen:");
+            if (idStr == null) return;
+            int id = Integer.parseInt(idStr);
+
+            String montoStr = JOptionPane.showInputDialog(this, "Ingrese monto a retirar:");
+            if (montoStr == null) return;
+            double monto = Double.parseDouble(montoStr);
+
+            registrarTransaccion("Retiro", monto, id, 0);
+            JOptionPane.showMessageDialog(this, "Retiro realizado.");
+
+        } catch (Exception e) {
+            mostrarError(e.getMessage());
+        }
+    }
+
+    // 6. Transferencia
+    private void transferir() {
+        try {
+            String idOrStr = JOptionPane.showInputDialog(this, "Ingrese ID Cuenta Origen:");
+            if (idOrStr == null) return;
+            int idOr = Integer.parseInt(idOrStr);
+
+            String idDeStr = JOptionPane.showInputDialog(this, "Ingrese ID Cuenta Destino:");
+            if (idDeStr == null) return;
+            int idDe = Integer.parseInt(idDeStr);
+
+            String montoStr = JOptionPane.showInputDialog(this, "Ingrese monto a transferir:");
+            if (montoStr == null) return;
+            double monto = Double.parseDouble(montoStr);
+
+            registrarTransaccion("Transferencia", monto, idOr, idDe);
+            JOptionPane.showMessageDialog(this, "Transferencia exitosa.");
+
+        } catch (Exception e) {
+            mostrarError(e.getMessage());
+        }
+    }
+
+    // 7. Buscar por ID (Auxiliar)
+    private void buscarCuentaPorID() {
+        String idStr = JOptionPane.showInputDialog(this, "Ingrese ID a buscar:");
+        if (idStr != null) {
+            try {
+                int id = Integer.parseInt(idStr);
+                int idx = buscarIndicePorID(id);
+                if (idx != -1) {
+                    // Seleccionar en la tabla
+                    for (int i = 0; i < jTableCuentas.getRowCount(); i++) {
+                        if (Integer.parseInt(jTableCuentas.getValueAt(i, 0).toString()) == id) {
+                            jTableCuentas.setRowSelectionInterval(i, i);
+                            jTableCuentas.scrollRectToVisible(jTableCuentas.getCellRect(i, 0, true));
+                            JOptionPane.showMessageDialog(this, "Cuenta encontrada: " + cuentas[idx].titular);
+                            return;
+                        }
+                    }
+                } else {
+                    mostrarError("Cuenta no encontrada.");
+                }
+            } catch (Exception e) {
+                mostrarError("ID inválido.");
+            }
+        }
+    }
+
+    // 8. Filtrar Transacciones (Antes "Actualizar")
     private void consultarTransacciones() {
         String[] opciones = {"Ver Activas", "Ver Cerradas (Historial)"};
-        int seleccion = JOptionPane.showOptionDialog(this, 
-                "¿Qué lista de transacciones desea consultar?", 
-                "Selector de Historial", 
-                JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE, null, opciones, opciones[0]);
+        int seleccion = JOptionPane.showOptionDialog(this,
+                "¿Qué lista de transacciones desea consultar?",
+                "Selector de Historial",
+                JOptionPane.DEFAULT_OPTION,
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                opciones,
+                opciones[0]);
 
         if (seleccion == 0) {
             actualizarTablaTransacciones(true); // Activas
-            actualizarTablaCuentas(); // Refrescar cuentas también
         } else if (seleccion == 1) {
-            actualizarTablaTransacciones(false); // Cerradas
+            actualizarTablaTransacciones(false); // Inactivas
         }
     }
 
-    // --- GESTIÓN DE TRANSACCIONES (El nucleo de REQ I y J) ---
+    // --- MÉTODOS AUXILIARES ---
 
-    private void registrarTransaccion(String tipo, double monto, int or, int des) {
-        // Desplazamiento FIFO si se llena el array de activas (Max 20)
-        if (contTransActivas >= 20) {
-            for (int i = 0; i < 19; i++) {
-                transActivas[i] = transActivas[i+1];
-            }
-            contTransActivas = 19;
+    private void registrarTransaccion(String tipo, double monto, int idOrigen, int idDestino) throws Exception {
+        if (monto <= 0) throw new Exception("El monto debe ser positivo.");
+
+        int idxOr = -1;
+        int idxDe = -1;
+
+        // Validaciones y lógica de saldos
+        if (idOrigen != 0) {
+            idxOr = buscarIndicePorID(idOrigen);
+            if (idxOr == -1 || !cuentas[idxOr].activa) throw new Exception("Cuenta origen inválida o cerrada.");
+            if (cuentas[idxOr].saldo < monto) throw new Exception("Saldo insuficiente.");
         }
+
+        if (idDestino != 0) {
+            idxDe = buscarIndicePorID(idDestino);
+            if (idxDe == -1 || !cuentas[idxDe].activa) throw new Exception("Cuenta destino inválida o cerrada.");
+        }
+
+        // Ejecutar movimiento
+        if (idxOr != -1) cuentas[idxOr].saldo -= monto;
+        if (idxDe != -1) cuentas[idxDe].saldo += monto;
+
+        // Guardar transacción
+        int idTrans = 10000 + contTransActivas;
+        Transaccion t = new Transaccion(idTrans, tipo, monto, idOrigen, idDestino);
         
-        int idTrans = 1 + contTransActivas + contTransInactivas + (int)(Math.random()*1000);
-        transActivas[contTransActivas] = new Transaccion(idTrans, tipo, monto, or, des);
-        contTransActivas++;
-        
+        if (contTransActivas < transActivas.length) {
+            transActivas[contTransActivas] = t;
+            contTransActivas++;
+        }
+
+        actualizarTablaCuentas();
         actualizarTablaTransacciones(true);
-    }
-
-    private void moverTransaccionesAHistorialInactivo(int idCuentaCerrada) {
-        // Creamos un array temporal para mantener las que sigan activas
-        Transaccion[] tempActivas = new Transaccion[20];
-        int tempCount = 0;
-
-        for (int i = 0; i < contTransActivas; i++) {
-            Transaccion t = transActivas[i];
-            // Si la transacción pertenece a la cuenta cerrada
-            if (t.idOrigen == idCuentaCerrada || t.idDestino == idCuentaCerrada) {
-                // Mover a inactivas (Max 10 - FIFO)
-                if (contTransInactivas < 10) {
-                    transInactivas[contTransInactivas] = t;
-                    contTransInactivas++;
-                } else {
-                    // Si historial desactivado lleno, borrar la más vieja y agregar nueva
-                    for (int k = 0; k < 9; k++) transInactivas[k] = transInactivas[k+1];
-                    transInactivas[9] = t;
-                }
-            } else {
-                // Si no tiene que ver con la cerrada, se queda en activas
-                tempActivas[tempCount] = t;
-                tempCount++;
-            }
-        }
-        // Reemplazar el array de activas con el filtrado
-        transActivas = tempActivas;
-        contTransActivas = tempCount;
-    }
-
-    // --- UTILIDADES VISUALES ---
-
-    private void actualizarTablaCuentas() {
-        modeloCuentas.setRowCount(0);
-        for (int i = 0; i < contadorCuentas; i++) {
-            Cuenta c = cuentas[i];
-            modeloCuentas.addRow(new Object[]{c.id, c.titular, c.saldo, c.activa ? "Activa" : "Cerrada"});
-        }
-    }
-
-    private void actualizarTablaTransacciones(boolean mostrarActivas) {
-        modeloTransacciones.setRowCount(0);
-        if (mostrarActivas) {
-            // REQ I: Solo activas
-            for (int i = 0; i < contTransActivas; i++) {
-                Transaccion t = transActivas[i];
-                modeloTransacciones.addRow(new Object[]{t.id, t.tipo, t.monto, t.idOrigen, t.idDestino, t.fecha});
-            }
-        } else {
-            // REQ J: Solo desactivadas
-            for (int i = 0; i < contTransInactivas; i++) {
-                Transaccion t = transInactivas[i];
-                modeloTransacciones.addRow(new Object[]{t.id, t.tipo + " (OFF)", t.monto, t.idOrigen, t.idDestino, t.fecha});
-            }
-        }
     }
 
     private int buscarIndicePorID(int id) {
@@ -418,11 +372,64 @@ public class BancoGUI extends javax.swing.JFrame {
         }
         return -1;
     }
-    
-    private int obtenerInt(String s) {
-        try { return Integer.parseInt(s); } catch(Exception e) { return -1; }
+
+    private void moverTransaccionesAHistorialInactivo(int idCuentaCerrada) {
+        // Mover transacciones asociadas a la cuenta cerrada de Activas a Inactivas
+        // Nota: Esta es una simplificación. En un sistema real usaríamos listas dinámicas (ArrayList).
+        
+        Transaccion[] tempActivas = new Transaccion[100];
+        int tempCount = 0;
+
+        for (int i = 0; i < contTransActivas; i++) {
+            Transaccion t = transActivas[i];
+            if (t.idOrigen == idCuentaCerrada || t.idDestino == idCuentaCerrada) {
+                // Mover a inactivas
+                if (contTransInactivas < transInactivas.length) {
+                    transInactivas[contTransInactivas] = t;
+                    contTransInactivas++;
+                }
+            } else {
+                // Mantener en activas
+                tempActivas[tempCount] = t;
+                tempCount++;
+            }
+        }
+        transActivas = tempActivas;
+        contTransActivas = tempCount;
+    }
+
+    private void actualizarTablaCuentas() {
+        modeloCuentas.setRowCount(0);
+        for (int i = 0; i < contadorCuentas; i++) {
+            Cuenta c = cuentas[i];
+            modeloCuentas.addRow(new Object[]{
+                c.id, 
+                c.titular, 
+                c.saldo, 
+                c.activa ? "Activa" : "Cerrada"
+            });
+        }
+    }
+
+    private void actualizarTablaTransacciones(boolean mostrarActivas) {
+        modeloTransacciones.setRowCount(0);
+        Transaccion[] fuente = mostrarActivas ? transActivas : transInactivas;
+        int cantidad = mostrarActivas ? contTransActivas : contTransInactivas;
+
+        for (int i = 0; i < cantidad; i++) {
+            Transaccion t = fuente[i];
+            modeloTransacciones.addRow(new Object[]{
+                t.tipo,
+                t.monto,
+                t.idOrigen == 0 ? "-" : t.idOrigen,
+                t.idDestino == 0 ? "-" : t.idDestino,
+                t.fecha
+            });
+        }
     }
     
+    
+
     private void mostrarError(String msg) {
         JOptionPane.showMessageDialog(this, msg, "Error / Validación", JOptionPane.ERROR_MESSAGE);
     }
@@ -438,39 +445,29 @@ public class BancoGUI extends javax.swing.JFrame {
         jTabbedPane1 = new javax.swing.JTabbedPane();
         jPanel1 = new javax.swing.JPanel();
         jScrollPane1 = new javax.swing.JScrollPane();
-        jTable1 = new javax.swing.JTable();
+        jTableCuentas = new javax.swing.JTable();
         jPanel3 = new javax.swing.JPanel();
-        jLabel1 = new javax.swing.JLabel();
-        jTextField1 = new javax.swing.JTextField();
-        jButton1 = new javax.swing.JButton();
-        jButton2 = new javax.swing.JButton();
-        jButton3 = new javax.swing.JButton();
-        jLabel5 = new javax.swing.JLabel();
-        jTextField5 = new javax.swing.JTextField();
-        jButton7 = new javax.swing.JButton();
+        btnCrear = new javax.swing.JButton();
+        btnCerrar = new javax.swing.JButton();
+        btnModificar = new javax.swing.JButton();
+        btnBuscar = new javax.swing.JButton();
         jPanel2 = new javax.swing.JPanel();
         jScrollPane2 = new javax.swing.JScrollPane();
         jTable2 = new javax.swing.JTable();
         jPanel4 = new javax.swing.JPanel();
         jPanel5 = new javax.swing.JPanel();
-        jLabel2 = new javax.swing.JLabel();
-        jTextField2 = new javax.swing.JTextField();
-        jButton4 = new javax.swing.JButton();
-        jButton5 = new javax.swing.JButton();
+        btnDepositar = new javax.swing.JButton();
+        btnRetirar = new javax.swing.JButton();
         jPanel6 = new javax.swing.JPanel();
-        jLabel3 = new javax.swing.JLabel();
-        jTextField3 = new javax.swing.JTextField();
-        jLabel4 = new javax.swing.JLabel();
-        jTextField4 = new javax.swing.JTextField();
-        jButton6 = new javax.swing.JButton();
+        btnTransferir = new javax.swing.JButton();
+        btnFiltrar = new javax.swing.JButton();
         jPanel7 = new javax.swing.JPanel();
-        jButton8 = new javax.swing.JButton();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
 
         jPanel1.setLayout(new java.awt.BorderLayout());
 
-        jTable1.setModel(new javax.swing.table.DefaultTableModel(
+        jTableCuentas.setModel(new javax.swing.table.DefaultTableModel(
             new Object [][] {
                 {null, null, null, null},
                 {null, null, null, null},
@@ -481,64 +478,43 @@ public class BancoGUI extends javax.swing.JFrame {
                 "ID", "Titular", "Saldo", "Estado"
             }
         ));
-        jScrollPane1.setViewportView(jTable1);
+        jScrollPane1.setViewportView(jTableCuentas);
 
         jPanel1.add(jScrollPane1, java.awt.BorderLayout.CENTER);
 
-        jLabel1.setText("Titular");
+        btnCrear.setText("Crear cuenta");
 
-        jButton1.setText("Crear cuenta");
+        btnCerrar.setText("Cerrar cuenta");
 
-        jButton2.setText("Cerrar cuenta");
+        btnModificar.setText("Modificar titular");
 
-        jButton3.setText("Modificar titular");
-
-        jLabel5.setText("Buscar ID:");
-
-        jButton7.setText("Buscar");
+        btnBuscar.setText("Buscar");
 
         javax.swing.GroupLayout jPanel3Layout = new javax.swing.GroupLayout(jPanel3);
         jPanel3.setLayout(jPanel3Layout);
         jPanel3Layout.setHorizontalGroup(
             jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(jPanel3Layout.createSequentialGroup()
-                .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addGroup(jPanel3Layout.createSequentialGroup()
-                        .addGap(26, 26, 26)
-                        .addComponent(jLabel1, javax.swing.GroupLayout.PREFERRED_SIZE, 38, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addComponent(jTextField1, javax.swing.GroupLayout.PREFERRED_SIZE, 169, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
-                        .addComponent(jButton1, javax.swing.GroupLayout.PREFERRED_SIZE, 107, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
-                        .addComponent(jButton2, javax.swing.GroupLayout.PREFERRED_SIZE, 107, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
-                        .addComponent(jButton3))
-                    .addGroup(jPanel3Layout.createSequentialGroup()
-                        .addGap(201, 201, 201)
-                        .addComponent(jLabel5, javax.swing.GroupLayout.PREFERRED_SIZE, 54, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addComponent(jTextField5, javax.swing.GroupLayout.PREFERRED_SIZE, 71, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addGap(12, 12, 12)
-                        .addComponent(jButton7)))
-                .addContainerGap(32, Short.MAX_VALUE))
+                .addGap(88, 88, 88)
+                .addComponent(btnCrear, javax.swing.GroupLayout.PREFERRED_SIZE, 107, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(btnCerrar, javax.swing.GroupLayout.PREFERRED_SIZE, 107, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                .addComponent(btnModificar)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                .addComponent(btnBuscar, javax.swing.GroupLayout.PREFERRED_SIZE, 108, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addContainerGap(81, Short.MAX_VALUE))
         );
         jPanel3Layout.setVerticalGroup(
             jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(jPanel3Layout.createSequentialGroup()
                 .addGap(18, 18, 18)
                 .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(jLabel1)
-                    .addComponent(jTextField1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(jButton1)
-                    .addComponent(jButton2)
-                    .addComponent(jButton3))
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(jLabel5)
-                    .addComponent(jTextField5, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(jButton7))
-                .addContainerGap(11, Short.MAX_VALUE))
+                    .addComponent(btnCrear)
+                    .addComponent(btnCerrar)
+                    .addComponent(btnModificar)
+                    .addComponent(btnBuscar))
+                .addContainerGap(40, Short.MAX_VALUE))
         );
 
         jPanel1.add(jPanel3, java.awt.BorderLayout.PAGE_START);
@@ -564,96 +540,69 @@ public class BancoGUI extends javax.swing.JFrame {
 
         jPanel4.setLayout(new java.awt.GridLayout(3, 1));
 
-        jLabel2.setText("Monto:");
+        btnDepositar.setText("Depositar");
 
-        jButton4.setText("Depositar");
-
-        jButton5.setText("Retirar");
+        btnRetirar.setText("Retirar");
 
         javax.swing.GroupLayout jPanel5Layout = new javax.swing.GroupLayout(jPanel5);
         jPanel5.setLayout(jPanel5Layout);
         jPanel5Layout.setHorizontalGroup(
             jPanel5Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(jPanel5Layout.createSequentialGroup()
-                .addGap(150, 150, 150)
-                .addComponent(jLabel2, javax.swing.GroupLayout.PREFERRED_SIZE, 41, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jTextField2, javax.swing.GroupLayout.PREFERRED_SIZE, 103, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jButton4)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jButton5)
-                .addContainerGap(168, Short.MAX_VALUE))
+                .addGap(193, 193, 193)
+                .addComponent(btnDepositar)
+                .addGap(77, 77, 77)
+                .addComponent(btnRetirar)
+                .addContainerGap(214, Short.MAX_VALUE))
         );
         jPanel5Layout.setVerticalGroup(
             jPanel5Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(jPanel5Layout.createSequentialGroup()
                 .addContainerGap()
                 .addGroup(jPanel5Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(jLabel2)
-                    .addComponent(jTextField2, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(jButton4)
-                    .addComponent(jButton5))
+                    .addComponent(btnDepositar)
+                    .addComponent(btnRetirar))
                 .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
         );
 
         jPanel4.add(jPanel5);
 
-        jLabel3.setText("Cuenta origen:");
+        btnTransferir.setText("Transferir");
 
-        jLabel4.setText("Cuenta destino:");
-
-        jButton6.setText("Transferir");
+        btnFiltrar.setText("Filtrar");
 
         javax.swing.GroupLayout jPanel6Layout = new javax.swing.GroupLayout(jPanel6);
         jPanel6.setLayout(jPanel6Layout);
         jPanel6Layout.setHorizontalGroup(
             jPanel6Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(jPanel6Layout.createSequentialGroup()
-                .addGap(111, 111, 111)
-                .addComponent(jLabel3)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jTextField3, javax.swing.GroupLayout.PREFERRED_SIZE, 71, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addGap(15, 15, 15)
-                .addComponent(jLabel4)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jTextField4, javax.swing.GroupLayout.PREFERRED_SIZE, 71, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addGap(12, 12, 12)
-                .addComponent(jButton6)
-                .addContainerGap(103, Short.MAX_VALUE))
+                .addGap(192, 192, 192)
+                .addComponent(btnTransferir)
+                .addGap(76, 76, 76)
+                .addComponent(btnFiltrar)
+                .addContainerGap(216, Short.MAX_VALUE))
         );
         jPanel6Layout.setVerticalGroup(
             jPanel6Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(jPanel6Layout.createSequentialGroup()
-                .addContainerGap()
+            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel6Layout.createSequentialGroup()
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                 .addGroup(jPanel6Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(jLabel3)
-                    .addComponent(jTextField3, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(jLabel4)
-                    .addComponent(jTextField4, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(jButton6))
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                    .addComponent(btnTransferir)
+                    .addComponent(btnFiltrar))
+                .addContainerGap())
         );
 
         jPanel4.add(jPanel6);
-
-        jButton8.setText("Actualizar listas");
 
         javax.swing.GroupLayout jPanel7Layout = new javax.swing.GroupLayout(jPanel7);
         jPanel7.setLayout(jPanel7Layout);
         jPanel7Layout.setHorizontalGroup(
             jPanel7Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(jPanel7Layout.createSequentialGroup()
-                .addGap(253, 253, 253)
-                .addComponent(jButton8)
-                .addContainerGap(272, Short.MAX_VALUE))
+            .addGap(0, 636, Short.MAX_VALUE)
         );
         jPanel7Layout.setVerticalGroup(
             jPanel7Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(jPanel7Layout.createSequentialGroup()
-                .addContainerGap()
-                .addComponent(jButton8)
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+            .addGap(0, 35, Short.MAX_VALUE)
         );
 
         jPanel4.add(jPanel7);
@@ -702,19 +651,14 @@ public class BancoGUI extends javax.swing.JFrame {
     }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
-    private javax.swing.JButton jButton1;
-    private javax.swing.JButton jButton2;
-    private javax.swing.JButton jButton3;
-    private javax.swing.JButton jButton4;
-    private javax.swing.JButton jButton5;
-    private javax.swing.JButton jButton6;
-    private javax.swing.JButton jButton7;
-    private javax.swing.JButton jButton8;
-    private javax.swing.JLabel jLabel1;
-    private javax.swing.JLabel jLabel2;
-    private javax.swing.JLabel jLabel3;
-    private javax.swing.JLabel jLabel4;
-    private javax.swing.JLabel jLabel5;
+    private javax.swing.JButton btnBuscar;
+    private javax.swing.JButton btnCerrar;
+    private javax.swing.JButton btnCrear;
+    private javax.swing.JButton btnDepositar;
+    private javax.swing.JButton btnFiltrar;
+    private javax.swing.JButton btnModificar;
+    private javax.swing.JButton btnRetirar;
+    private javax.swing.JButton btnTransferir;
     private javax.swing.JPanel jPanel1;
     private javax.swing.JPanel jPanel2;
     private javax.swing.JPanel jPanel3;
@@ -725,12 +669,7 @@ public class BancoGUI extends javax.swing.JFrame {
     private javax.swing.JScrollPane jScrollPane1;
     private javax.swing.JScrollPane jScrollPane2;
     private javax.swing.JTabbedPane jTabbedPane1;
-    private javax.swing.JTable jTable1;
     private javax.swing.JTable jTable2;
-    private javax.swing.JTextField jTextField1;
-    private javax.swing.JTextField jTextField2;
-    private javax.swing.JTextField jTextField3;
-    private javax.swing.JTextField jTextField4;
-    private javax.swing.JTextField jTextField5;
+    private javax.swing.JTable jTableCuentas;
     // End of variables declaration//GEN-END:variables
 }
